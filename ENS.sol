@@ -1,40 +1,91 @@
-//SPDX-License-Identifier: GPL-3.0 
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
-contract ENS {
+contract EnsDomain {
+    address private owner;
+    uint256 public oneYearPrice;
+    uint256 public renewalCoefficient;
 
-    address payable owner;
+    uint256 constant SECONDS_IN_YEAR = 31536000; 
+
+    struct DomainInfo {
+        address owner;
+        uint256 dateOfRegistration;
+        uint256 price;
+        uint256 subscribeYears;
+    }
+
+    mapping(string => DomainInfo) public domains;
 
     constructor() {
-        owner = payable(msg.sender);
+        owner = msg.sender;
     }
 
-    struct ensAddress {
-        address addressUser;
-        uint timestamp;
-        uint price;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "You are not an owner!");
+        _;
     }
 
-    mapping(string => ensAddress) public domens;
-
-    function buyDomen(string memory _nameDomen) public payable {
-        require(msg.value >= 1 * 10**18, "There must be more than 1 ether");
-
-        domens[_nameDomen] = ensAddress({
-            addressUser: msg.sender,
-            timestamp: block.timestamp,
-            price: msg.value
-        });
+    function setOneYearPrice(uint256 _price) public onlyOwner {
+        oneYearPrice = _price;
     }
 
-    function getDomen(string memory _nameDomen) view public returns(address) {
-        return domens[_nameDomen].addressUser;
+    function setRenewalCoefficient(uint256 _coefficient) public onlyOwner {
+        renewalCoefficient = _coefficient;
     }
 
-    function withdrawAll() public {
-        require(msg.sender == owner, "You are not owner");
+    function buyEnsDomanin(
+        string memory domain,
+        uint256 subscribeYears
+    ) public payable {
+        require(
+            subscribeYears <= 10 && subscribeYears >= 1,
+            "Incorrect period!"
+        );
+        require(
+            msg.value >= subscribeYears * oneYearPrice,
+            "You don't have enough funds!"
+        );
+        require(_isDomainAvaliable(domain), "Domain is not avaliable!");
 
-        owner.transfer(address(this).balance);
+        domains[domain] = DomainInfo(
+            msg.sender,
+            block.timestamp,
+            msg.value,
+            subscribeYears
+        );
     }
- 
+
+    function domainRenewal(
+        string memory domain,
+        uint256 renewYears
+    ) public payable {
+        require(domains[domain].owner == msg.sender, "You're not owner!");
+        require(!_isDomainAvaliable(domain), "Subscription already ended!"); 
+        uint256 price = (oneYearPrice * renewYears) / 100; 
+        require(msg.value >= price, "You don't have enought funds!");
+        domains[domain].price += price;
+        domains[domain].subscribeYears += renewYears; 
+    }
+
+    function _isDomainAvaliable(
+        string memory domain
+    ) private view returns (bool) {
+        return
+            block.timestamp -
+                (domains[domain].dateOfRegistration +
+                    SECONDS_IN_YEAR *
+                    domains[domain].subscribeYears) >
+            0; 
+    }
+
+    function getDomainOwner(
+        string memory domainName
+    ) public view returns (address) {
+        return domains[domainName].owner;
+    }
+
+    function withdrawMoney() public onlyOwner {
+        payable(msg.sender).transfer(address(this).balance);
+    }
 }
